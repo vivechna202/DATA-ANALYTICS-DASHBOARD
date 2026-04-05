@@ -1,5 +1,13 @@
+import logging
+
 from flask import Flask, render_template
+
 from analytics_dashboard.routes.query_routes import query_bp
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 app = Flask(
     __name__,

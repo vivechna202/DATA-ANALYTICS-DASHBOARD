@@ -6,7 +6,7 @@
 
     <style>
         body {
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             padding: 20px;
             background: #f5f5f5;
         }
@@ -15,17 +15,35 @@
             color: #333;
         }
 
-        input {
+        label {
+            display: block;
+            margin-top: 12px;
+            font-size: 13px;
+            color: #444;
+        }
+
+        input[type="text"], select {
             padding: 10px;
-            width: 300px;
+            width: 100%;
+            max-width: 480px;
+            box-sizing: border-box;
+        }
+
+        .row {
+            max-width: 500px;
         }
 
         button {
+            margin-top: 16px;
             padding: 10px 15px;
             background: #007BFF;
             color: white;
             border: none;
             cursor: pointer;
+        }
+
+        button:hover {
+            background: #0069d9;
         }
 
         #answer {
@@ -43,15 +61,59 @@
         #chart {
             margin-top: 30px;
         }
+
+        .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+
+        .mongo-fields {
+            display: none;
+            margin-top: 8px;
+        }
+
+        .mongo-fields.visible {
+            display: block;
+        }
     </style>
 </head>
 
 <body>
 
-    <h1>🤖 AI Analytics Dashboard</h1>
+    <h1>AI Analytics Dashboard</h1>
 
-    <input type="text" id="queryInput" placeholder="Ask anything..." />
-    <button onclick="sendQuery()">Submit</button>
+    <div class="row">
+        <label for="sourceType">Data source</label>
+        <select id="sourceType" onchange="toggleMongoFields()">
+            <option value="auto">Auto (sales CSV analytics, then default PDF RAG)</option>
+            <option value="pdf">PDF (path to .pdf file)</option>
+            <option value="csv">CSV (path to .csv file → RAG over rows as text)</option>
+            <option value="mongo">MongoDB (connection URI)</option>
+        </select>
+    </div>
+
+    <div class="row">
+        <label for="sourceInput">File path or MongoDB URI</label>
+        <input type="text" id="sourceInput" placeholder="Path without quotes, e.g. analytics_dashboard/data/sales.csv" />
+        <p class="hint" id="sourceHint">Leave empty in Auto mode. For MongoDB, paste the full URI here.</p>
+    </div>
+
+    <div id="mongoFields" class="mongo-fields">
+        <label for="mongoDatabase">Database (optional if in URI)</label>
+        <input type="text" id="mongoDatabase" placeholder="mydb" />
+        <label for="mongoCollection">Collection (required)</label>
+        <input type="text" id="mongoCollection" placeholder="documents" />
+        <label for="mongoLimit">Document limit</label>
+        <input type="text" id="mongoLimit" placeholder="5000" />
+    </div>
+
+    <div class="row">
+        <label for="queryInput">Question</label>
+        <input type="text" id="queryInput" placeholder="Ask anything..." />
+    </div>
+
+    <button type="button" onclick="sendQuery()">Submit</button>
 
     <h3 id="answer"></h3>
     <div id="source"></div>
@@ -59,36 +121,61 @@
     <div id="chart"></div>
 
     <script>
+        function toggleMongoFields() {
+            const st = document.getElementById("sourceType").value;
+            const mongo = document.getElementById("mongoFields");
+            const hint = document.getElementById("sourceHint");
+            mongo.classList.toggle("visible", st === "mongo");
+            if (st === "auto") {
+                hint.innerText = "Leave empty in Auto mode.";
+            } else if (st === "mongo") {
+                hint.innerText = "Paste mongodb:// or mongodb+srv:// URI. Set database/collection below if not in URI.";
+            } else {
+                hint.innerText = "Absolute or project-relative path — no surrounding quotes.";
+            }
+        }
+
         async function sendQuery() {
             const query = document.getElementById("queryInput").value;
+            const sourceType = document.getElementById("sourceType").value;
+            const sourceInput = document.getElementById("sourceInput").value.trim();
 
-            const response = await fetch("http://127.0.0.1:5000/query", {
+            const body = { query: query, source_type: sourceType };
+            if (sourceInput) {
+                body.source_input = sourceInput;
+            }
+            if (sourceType === "mongo") {
+                const db = document.getElementById("mongoDatabase").value.trim();
+                const coll = document.getElementById("mongoCollection").value.trim();
+                const lim = document.getElementById("mongoLimit").value.trim();
+                if (db) body.mongo_database = db;
+                if (coll) body.mongo_collection = coll;
+                if (lim) body.mongo_limit = parseInt(lim, 10);
+            }
+
+            const response = await fetch("/query", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ query: query })
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body)
             });
 
             const data = await response.json();
 
-            // Show answer
             document.getElementById("answer").innerText =
-                data.answer || data.message || data.error;
+                data.answer || data.message || data.error || "";
 
-            // Show source (CSV or RAG)
-            document.getElementById("source").innerText =
-                data.source ? `(Source: ${data.source.toUpperCase()})` : "";
+            const src = data.source ? `(Source: ${String(data.source).toUpperCase()})` : "";
+            document.getElementById("source").innerText = response.ok ? src : (data.error ? `Error: ${data.error}` : "");
 
-            // Clear old chart
             document.getElementById("chart").innerHTML = "";
 
-            // Show chart if exists
-            if (data.chart) {
+            if (response.ok && data.chart) {
                 const chartData = JSON.parse(data.chart);
                 Plotly.newPlot("chart", chartData.data, chartData.layout);
             }
         }
+
+        toggleMongoFields();
     </script>
 
 </body>
