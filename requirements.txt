@@ -1,11 +1,22 @@
+# Web
 flask
+
+# Data & charts
 pandas
 numpy
+plotly
+
+# RAG: embeddings + vector index
 sentence-transformers
 faiss-cpu
-plotly
+
+# LLM & config
 python-dotenv
-requests
-pypdf
 google-genai
+
+# Document / DB sources
+pypdf
 pymongo
+
+# HTTP (optional helpers / transitive use)
+requests

@@ -1,155 +1,187 @@
 # AI Analytics Dashboard
 
-A small Flask app that answers natural-language questions about sales data (CSV + charts) and falls back to **RAG** (retrieval-augmented generation) over a PDF when the CSV layer does not understand the query.
+Flask app for **analytics-style questions** over CSV (with charts), plus **RAG** over **PDF**, **CSV-as-text**, or **MongoDB** using Sentence Transformers, **FAISS**, and **Google Gemini** (with structured fallback if the API fails).
 
 ## Features
 
-- **CSV analytics** — Pandas reads `analytics_dashboard/data/sales.csv` and answers queries about totals, averages, and trends.
-- **Charts** — Plotly line charts for sales trend queries; the front end renders them with Plotly.js.
-- **RAG pipeline** — Loads `analytics_dashboard/data/documents/pdf-data.pdf`, chunks text, embeds with Sentence Transformers, stores vectors in **FAISS**, retrieves relevant chunks, and generates answers with **Google Gemini** (with a rule-based fallback if the API fails).
-- **Single-page UI** — `index.html` with a query box and optional chart area.
+- **Auto mode (default)** — Keyword analytics on `analytics_dashboard/data/sales.csv` (totals, averages, trend chart). If the query does not match, RAG runs on the default PDF (`analytics_dashboard/data/documents/pdf-data.pdf`).
+- **Explicit sources** — Choose **PDF path**, **CSV path** (rows turned into text for RAG), or **MongoDB URI** (documents turned into text). Pipelines are **cached** when the same source is reused.
+- **RAG** — Chunk → embed (`all-MiniLM-L6-v2`) → FAISS → retrieve → **Gemini** answer (retries multiple Flash model ids; fallback uses heuristics on retrieved text).
+- **UI** — Single page: data source dropdown, path/URI field, optional Mongo fields, question box; uses **`POST /query`** (relative URL).
 
 ## How it works
 
-1. User submits a question from the browser (POST to `/query`).
-2. **CSV path first** — `query_service.handle_query()` checks for keywords (`total sales`, `average sales`, `trend`). If matched, it returns text and optionally a Plotly chart JSON with `source: "csv"`.
-3. **RAG path** — If the result is `Query not understood`, the app runs `RAGPipeline.query()`, which embeds the question, searches FAISS, calls the LLM with retrieved context, and returns `source: "rag"`.
+### `source_type`: `auto` (default)
+
+1. `POST /query` with `{ "query": "..." }` (optionally omit `source_type` or set `"auto"`).
+2. **CSV keywords** — Phrases containing `total sales`, `average sales`, or `trend` → Pandas + optional Plotly chart → `source: "csv"`.
+3. **Else** — Default PDF RAG → `source: "rag"`.
+
+### `source_type`: `pdf` | `csv` | `mongo`
+
+1. Send `source_type` and `source_input` (file path or MongoDB URI).
+2. Data is loaded via `analytics_dashboard.sources.load_data()` → text → `RAGPipeline.from_text()` (cached per source key) → answer → `source: "rag:pdf"` (or `csv` / `mongo`).
 
 ```
-User question
-    → Flask (/query)
-        → handle_query (CSV)
-            → understood? → JSON + source: csv
-            → not understood? → RAGPipeline → JSON + source: rag
+auto:   query → CSV rules? → else default PDF RAG
+pdf/csv/mongo:  query → load_data → cached RAG → answer
 ```
 
 ## Project structure
 
 ```
 mini_prj/
-├── app.py                          # Flask entry: registers blueprint, serves index
-├── config.py                       # Reserved for future settings (optional)
-├── setup.py                        # Package metadata (setuptools)
+├── app.py
+├── setup.py
 ├── requirements.txt
-├── Dockerfile                      # Optional deployment (configure as needed)
-├── .dockerignore
+├── .env                         # create locally: API keys (not committed)
 ├── analytics_dashboard/
 │   ├── data/
-│   │   ├── sales.csv               # Sample monthly sales
+│   │   ├── sales.csv
 │   │   └── documents/
-│   │       └── pdf-data.pdf        # Document for RAG (required for RAG)
+│   │       └── pdf-data.pdf     # default RAG doc for auto mode
+│   ├── sources/
+│   │   ├── loader.py            # load_data(source_type, source_input, **opts)
+│   │   ├── pdf_handler.py
+│   │   ├── csv_handler.py
+│   │   └── mongo_handler.py
 │   ├── routes/
-│   │   └── query_routes.py         # POST /query, wires CSV then RAG
+│   │   └── query_routes.py      # POST /query
 │   ├── services/
-│   │   └── query_service.py        # CSV / Plotly logic
+│   │   ├── query_service.py     # process_query, auto vs explicit sources
+│   │   └── pipeline_cache.py    # LRU cache for RAG pipelines
 │   ├── rag/
-│   │   ├── pipeline.py             # RAG orchestration
-│   │   ├── pdf_loader.py           # PDF text extraction (pypdf)
-│   │   ├── chunking.py             # Line-based chunking
-│   │   ├── embeddings.py           # Sentence Transformers
-│   │   ├── vector_store.py         # FAISS index
-│   │   └── llm_generator.py        # Gemini + fallback answers
+│   │   ├── pipeline.py          # RAGPipeline(file_path) | from_text(text)
+│   │   ├── pdf_loader.py
+│   │   ├── chunking.py
+│   │   ├── embeddings.py
+│   │   ├── vector_store.py
+│   │   └── llm_generator.py     # Gemini + fallback
 │   ├── templates/
-│   │   └── index.html              # UI + fetch to /query
+│   │   └── index.html
 │   └── tests/
-│       └── test_api.py             # Manual-style RAG script (not pytest)
+│       └── test_api.py
 ```
-
-Optional scaffolding for extra modules (extra routes, static JS bundles, notebooks) may be created via `template.py` at the repo root; only the layout above is required for the current app.
 
 ## Prerequisites
 
-- Python 3.10+ recommended
-- A **Google API key** with access to Gemini (for full RAG answers). The app can still return fallback text from retrieved chunks if the API fails.
+- Python 3.10+
+- **Google AI Studio API key** for Gemini ([get a key](https://aistudio.google.com/apikey)). Revoked or “leaked” keys will not work; create a new key if you see `403` / “LLM unavailable”.
+- **MongoDB** (only if you use the Mongo source): cluster URI and **`pymongo`** installed (`requirements.txt` includes it).
 
 ## Environment variables
 
-Create a `.env` file in the project root (same folder as `app.py`):
+Create `.env` next to `app.py`:
 
-| Variable         | Purpose                                      |
-|-----------------|----------------------------------------------|
-| `GOOGLE_API_KEY` | Required for Gemini in `llm_generator.py`   |
+| Variable | Purpose |
+|----------|---------|
+| `GEMINI_API_KEY` | **Preferred** — Gemini API key from AI Studio. |
+| `GOOGLE_API_KEY` | Alternative if `GEMINI_API_KEY` is not set. |
 
-Without `GOOGLE_API_KEY`, importing the LLM module will raise; ensure the key is set before starting the app if you use the current code as-is.
+If neither is set, the app raises on import when loading `llm_generator`.
 
 ## Installation
 
-From the project root (`mini_prj`):
-
 ```bash
+cd mini_prj
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 # source .venv/bin/activate     # macOS / Linux
 
 pip install -r requirements.txt
-pip install -e .                  # optional: install analytics_dashboard as a package
+pip install -e .                # optional editable install
 ```
 
-## Run the app
+## Run
 
-Always start from the **project root** so paths like `analytics_dashboard/data/...` resolve correctly.
+From the **project root** (`mini_prj`):
 
 ```bash
 python app.py
 ```
 
-Open the UI at `http://127.0.0.1:5000/`.
+Open `http://127.0.0.1:5000/`.
 
-The first startup loads the embedding model and builds the FAISS index from the PDF (can take a minute).
+The first RAG use downloads/embeds models and may take a minute. **File paths** can be relative to the project root or absolute. Do not wrap paths in quotes in the UI (or use quotes — the server strips common wrapping quotes).
 
 ## API
 
 ### `POST /query`
 
-**Request** — JSON:
+**Headers:** `Content-Type: application/json`
+
+**Body (examples):**
 
 ```json
-{ "query": "your question here" }
+{ "query": "total sales" }
 ```
 
-**Response (CSV)** — Example fields:
+```json
+{
+  "query": "What category is Wireless Mouse?",
+  "source_type": "mongo",
+  "source_input": "mongodb+srv://user:pass@cluster.example.net/",
+  "mongo_database": "mydb",
+  "mongo_collection": "products",
+  "mongo_limit": 5000
+}
+```
 
-- `answer` — Text reply
-- `chart` — Optional Plotly figure JSON string (for trend queries)
-- `source` — `"csv"`
+```json
+{
+  "query": "Summarize discounts in the file.",
+  "source_type": "pdf",
+  "source_input": "analytics_dashboard/data/documents/pdf-data.pdf"
+}
+```
 
-**Response (RAG)**:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `query` | Yes | User question. |
+| `source_type` | No | `auto` (default), `pdf`, `csv`, or `mongo`. |
+| `source_input` | For `pdf` / `csv` / `mongo` | File path or MongoDB URI. |
+| `mongo_database` | Sometimes | If not part of the URI path. |
+| `mongo_collection` | For Mongo | Collection name. |
+| `mongo_limit` | No | Max documents (capped in code). |
 
-- `answer` — Model or fallback text
-- `source` — `"rag"`
+**Success:** `answer`, optional `chart` (Plotly JSON string), `source` (`csv`, `rag`, or `rag:pdf` / `rag:csv` / `rag:mongo`).
 
-**Error** — `500` with `{ "error": "..." }`.
+**Error:** HTTP **400** with `{ "error": "..." }`.
 
-### Example CSV queries
+### Auto mode — CSV keyword hints
 
-| Intent        | Example phrase   | Notes                    |
-|---------------|------------------|--------------------------|
-| Total sales   | contains `total sales` | Sum of `sales` column |
-| Average sales | contains `average sales` | Mean of `sales`      |
-| Trend chart   | contains `trend` | Line chart date vs sales |
+| Intent | Example phrase contains |
+|--------|-------------------------|
+| Total | `total sales` |
+| Average | `average sales` |
+| Trend chart | `trend` |
 
-Anything else is treated as not understood and is sent to RAG.
+Other phrasing in auto mode goes to default PDF RAG.
 
-## Front end
+## Troubleshooting
 
-`analytics_dashboard/templates/index.html` calls `http://127.0.0.1:5000/query`. For deployment behind another host or port, change the fetch URL to a **relative** path (`/query`) so the same origin is used.
+| Issue | What to do |
+|-------|------------|
+| `LLM unavailable (fallback mode)` | Check API key, quota, and server logs. Prefer `GEMINI_API_KEY` with a **new** key if the old one was disabled. |
+| `CSV not found` / bad path | Run `python app.py` from project root; use valid paths; avoid broken copy-paste (quotes are stripped, but path must be complete, e.g. ends in `.csv`). |
+| Mongo errors | Install deps; check URI, database, collection, and network allowlist for Atlas. |
 
 ## Tech stack
 
-| Layer        | Technology                          |
-|-------------|--------------------------------------|
-| Web         | Flask, Jinja templates               |
-| Data        | Pandas, CSV                          |
-| Charts      | Plotly (Python) + Plotly.js (CDN)    |
-| Embeddings  | sentence-transformers (`all-MiniLM-L6-v2`) |
-| Vector search | FAISS (`IndexFlatL2`)              |
-| PDF         | pypdf (`PdfReader`)                  |
-| LLM         | Google GenAI (Gemini Flash family)   |
+| Layer | Technology |
+|-------|------------|
+| Web | Flask, Jinja |
+| Data | Pandas, CSV, PyMongo (Mongo source) |
+| Charts | Plotly + Plotly.js |
+| Embeddings | sentence-transformers |
+| Vectors | FAISS |
+| PDF | pypdf |
+| LLM | `google-genai` (Gemini) |
 
 ## Docker
 
-`Dockerfile` and `.dockerignore` are present but not fully configured; add install steps, `COPY`, `ENV`, and `CMD`/`ENTRYPOINT` when you containerize the app.
+`Dockerfile` / `.dockerignore` may be empty or minimal; add image build steps when you deploy.
 
-## License / author
+## Author
 
-Package metadata is in `setup.py` (author: Vivechana Singh).
+See `setup.py` for package metadata.
