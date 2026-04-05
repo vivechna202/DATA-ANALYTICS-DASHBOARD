@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Analytics Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        input {
+            padding: 10px;
+            width: 300px;
+        }
+
+        button {
+            padding: 10px 15px;
+            background: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        #answer {
+            margin-top: 20px;
+            font-weight: bold;
+            white-space: pre-line;
+        }
+
+        #source {
+            margin-top: 5px;
+            font-size: 12px;
+            color: gray;
+        }
+
+        #chart {
+            margin-top: 30px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>🤖 AI Analytics Dashboard</h1>
+
+    <input type="text" id="queryInput" placeholder="Ask anything..." />
+    <button onclick="sendQuery()">Submit</button>
+
+    <h3 id="answer"></h3>
+    <div id="source"></div>
+
+    <div id="chart"></div>
+
+    <script>
+        async function sendQuery() {
+            const query = document.getElementById("queryInput").value;
+
+            const response = await fetch("http://127.0.0.1:5000/query", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ query: query })
+            });
+
+            const data = await response.json();
+
+            // Show answer
+            document.getElementById("answer").innerText =
+                data.answer || data.message || data.error;
+
+            // Show source (CSV or RAG)
+            document.getElementById("source").innerText =
+                data.source ? `(Source: ${data.source.toUpperCase()})` : "";
+
+            // Clear old chart
+            document.getElementById("chart").innerHTML = "";
+
+            // Show chart if exists
+            if (data.chart) {
+                const chartData = JSON.parse(data.chart);
+                Plotly.newPlot("chart", chartData.data, chartData.layout);
+            }
+        }
+    </script>
+
+</body>
+</html>
