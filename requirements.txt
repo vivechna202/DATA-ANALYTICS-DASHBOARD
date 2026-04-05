@@ -6,3 +6,5 @@ faiss-cpu
 plotly
 python-dotenv
 requests
+pypdf
+google-genai
