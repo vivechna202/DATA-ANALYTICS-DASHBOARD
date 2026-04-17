@@ -1,180 +1,343 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>AI Analytics Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 
     <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text: #1e2937;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: #f5f5f5;
+            font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e0e7ff 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 620px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 32px 40px;
+            text-align: center;
         }
 
         h1 {
-            color: #333;
+            font-size: 28px;
+            font-weight: 700;
+            margin: 0;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            opacity: 0.85;
+            font-size: 15px;
+            margin-top: 6px;
+            font-weight: 400;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
         }
 
         label {
             display: block;
-            margin-top: 12px;
-            font-size: 13px;
-            color: #444;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #374151;
         }
 
         input[type="text"], select {
-            padding: 10px;
             width: 100%;
-            max-width: 480px;
-            box-sizing: border-box;
+            padding: 14px 16px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            background: #fff;
         }
 
-        .row {
-            max-width: 500px;
+        input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
         }
 
-        button {
-            margin-top: 16px;
-            padding: 10px 15px;
-            background: #007BFF;
-            color: white;
-            border: none;
+        select {
             cursor: pointer;
         }
 
-        button:hover {
-            background: #0069d9;
-        }
-
-        #answer {
-            margin-top: 20px;
-            font-weight: bold;
-            white-space: pre-line;
-        }
-
-        #source {
-            margin-top: 5px;
-            font-size: 12px;
-            color: gray;
-        }
-
-        #chart {
-            margin-top: 30px;
-        }
-
         .hint {
-            font-size: 12px;
-            color: #666;
-            margin-top: 4px;
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 6px;
+            font-style: italic;
         }
 
         .mongo-fields {
             display: none;
-            margin-top: 8px;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-top: 16px;
         }
 
         .mongo-fields.visible {
             display: block;
+        }
+
+        button {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 12px;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(99, 102, 241, 0.35);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        #answer {
+            margin-top: 32px;
+            font-size: 18px;
+            line-height: 1.7;
+            padding: 24px;
+            background: #f8fafc;
+            border-radius: 16px;
+            border-left: 5px solid var(--primary);
+            white-space: pre-line;
+            min-height: 80px;
+        }
+
+        #source {
+            margin-top: 12px;
+            font-size: 13px;
+            color: #64748b;
+            text-align: center;
+        }
+
+        #chart {
+            margin-top: 40px;
+            padding: 20px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border);
+        }
+
+        .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 13px;
+            color: #94a3b8;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .content {
+                padding: 30px 24px;
+            }
+            header {
+                padding: 28px 24px;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <h1>AI Analytics Dashboard</h1>
+    <div class="container">
+        <header>
+            <h1>AI Analytics Dashboard</h1>
+            <p class="subtitle">Ask questions • Get insights • Visualize results</p>
+        </header>
 
-    <div class="row">
-        <label for="sourceType">Data source</label>
-        <select id="sourceType" onchange="toggleMongoFields()">
-            <option value="auto">Auto (sales CSV analytics, then default PDF RAG)</option>
-            <option value="pdf">PDF (path to .pdf file)</option>
-            <option value="csv">CSV (path to .csv file → RAG over rows as text)</option>
-            <option value="mongo">MongoDB (connection URI)</option>
-        </select>
+        <div class="content">
+            <div class="form-group">
+                <label for="sourceType">Data Source</label>
+                <select id="sourceType" onchange="toggleMongoFields()">
+                    <option value="auto">Auto (Sales CSV → PDF RAG)</option>
+                    <option value="pdf">PDF Document</option>
+                    <option value="csv">CSV File (Row-based RAG)</option>
+                    <option value="mongo">MongoDB Database</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="sourceInput">File Path or Connection URI</label>
+                <input type="text" id="sourceInput" placeholder="e.g. data/sales.csv or mongodb+srv://..." />
+                <p class="hint" id="sourceHint">Leave empty for Auto mode</p>
+            </div>
+
+            <!-- MongoDB Extra Fields -->
+            <div id="mongoFields" class="mongo-fields">
+                <div class="form-group">
+                    <label for="mongoDatabase">Database Name (optional)</label>
+                    <input type="text" id="mongoDatabase" placeholder="mydb" />
+                </div>
+                <div class="form-group">
+                    <label for="mongoCollection">Collection Name <span style="color:red;">*</span></label>
+                    <input type="text" id="mongoCollection" placeholder="documents" />
+                </div>
+                <div class="form-group">
+                    <label for="mongoLimit">Maximum Documents</label>
+                    <input type="text" id="mongoLimit" placeholder="5000" value="2000" />
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="queryInput">Your Question</label>
+                <input type="text" id="queryInput" placeholder="What was the total revenue in March?" />
+            </div>
+
+            <button type="button" onclick="sendQuery()">
+                🚀 Get AI Insights
+            </button>
+
+            <h3 id="answer"></h3>
+            <div id="source"></div>
+
+            <div id="chart"></div>
+        </div>
+
+        <div class="footer">
+            Powered by AI • Built with ❤️
+        </div>
     </div>
-
-    <div class="row">
-        <label for="sourceInput">File path or MongoDB URI</label>
-        <input type="text" id="sourceInput" placeholder="Path without quotes, e.g. analytics_dashboard/data/sales.csv" />
-        <p class="hint" id="sourceHint">Leave empty in Auto mode. For MongoDB, paste the full URI here.</p>
-    </div>
-
-    <div id="mongoFields" class="mongo-fields">
-        <label for="mongoDatabase">Database (optional if in URI)</label>
-        <input type="text" id="mongoDatabase" placeholder="mydb" />
-        <label for="mongoCollection">Collection (required)</label>
-        <input type="text" id="mongoCollection" placeholder="documents" />
-        <label for="mongoLimit">Document limit</label>
-        <input type="text" id="mongoLimit" placeholder="5000" />
-    </div>
-
-    <div class="row">
-        <label for="queryInput">Question</label>
-        <input type="text" id="queryInput" placeholder="Ask anything..." />
-    </div>
-
-    <button type="button" onclick="sendQuery()">Submit</button>
-
-    <h3 id="answer"></h3>
-    <div id="source"></div>
-
-    <div id="chart"></div>
 
     <script>
         function toggleMongoFields() {
             const st = document.getElementById("sourceType").value;
             const mongo = document.getElementById("mongoFields");
             const hint = document.getElementById("sourceHint");
+
             mongo.classList.toggle("visible", st === "mongo");
+
             if (st === "auto") {
-                hint.innerText = "Leave empty in Auto mode.";
+                hint.innerText = "Leave empty in Auto mode — system will choose best source";
             } else if (st === "mongo") {
-                hint.innerText = "Paste mongodb:// or mongodb+srv:// URI. Set database/collection below if not in URI.";
+                hint.innerText = "Enter MongoDB URI above. Configure collection below.";
             } else {
-                hint.innerText = "Absolute or project-relative path — no surrounding quotes.";
+                hint.innerText = "Enter file path (relative or absolute) — no quotes needed";
             }
         }
 
         async function sendQuery() {
-            const query = document.getElementById("queryInput").value;
+            const query = document.getElementById("queryInput").value.trim();
+            if (!query) {
+                alert("Please enter a question!");
+                return;
+            }
+
             const sourceType = document.getElementById("sourceType").value;
             const sourceInput = document.getElementById("sourceInput").value.trim();
 
-            const body = { query: query, source_type: sourceType };
-            if (sourceInput) {
-                body.source_input = sourceInput;
-            }
+            const body = { 
+                query: query, 
+                source_type: sourceType 
+            };
+
+            if (sourceInput) body.source_input = sourceInput;
+
             if (sourceType === "mongo") {
                 const db = document.getElementById("mongoDatabase").value.trim();
                 const coll = document.getElementById("mongoCollection").value.trim();
                 const lim = document.getElementById("mongoLimit").value.trim();
+
                 if (db) body.mongo_database = db;
                 if (coll) body.mongo_collection = coll;
                 if (lim) body.mongo_limit = parseInt(lim, 10);
             }
 
-            const response = await fetch("/query", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(body)
-            });
+            // Show loading state
+            const answerEl = document.getElementById("answer");
+            const btn = document.querySelector("button");
+            const originalBtnText = btn.innerHTML;
 
-            const data = await response.json();
+            answerEl.innerHTML = "Thinking...";
+            btn.innerHTML = "Processing...";
+            btn.disabled = true;
 
-            document.getElementById("answer").innerText =
-                data.answer || data.message || data.error || "";
+            try {
+                const response = await fetch("/query", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(body)
+                });
 
-            const src = data.source ? `(Source: ${String(data.source).toUpperCase()})` : "";
-            document.getElementById("source").innerText = response.ok ? src : (data.error ? `Error: ${data.error}` : "");
+                const data = await response.json();
 
-            document.getElementById("chart").innerHTML = "";
+                // Reset button
+                btn.innerHTML = originalBtnText;
+                btn.disabled = false;
 
-            if (response.ok && data.chart) {
-                const chartData = JSON.parse(data.chart);
-                Plotly.newPlot("chart", chartData.data, chartData.layout);
+                document.getElementById("answer").innerText = 
+                    data.answer || data.message || data.error || "No response received.";
+
+                const src = data.source ? `(Source: ${String(data.source).toUpperCase()})` : "";
+                document.getElementById("source").innerText = response.ok ? src : "";
+
+                // Clear and render chart if available
+                document.getElementById("chart").innerHTML = "";
+
+                if (response.ok && data.chart) {
+                    const chartData = JSON.parse(data.chart);
+                    Plotly.newPlot("chart", chartData.data, chartData.layout, {
+                        responsive: true,
+                        displayModeBar: true
+                    });
+                }
+            } catch (err) {
+                document.getElementById("answer").innerText = "Error connecting to server.";
+                console.error(err);
             }
         }
 
+        // Initialize
         toggleMongoFields();
     </script>
 
